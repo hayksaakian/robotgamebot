@@ -2,11 +2,7 @@ import rg
 import operator
 
 class Robot:
-    def act(self, game):
-        #adjacent_robots = self.robots_adjacent_to(self.location, game)
-        #adjacent_friendlies = self.robots_adjacent_to(self.location, game, self.player_id)
-        #adjacent_enemies = self.robots_adjacent_to(self.location, game, self.player_id, "!=")
-        
+    def act(self, game):        
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__eq__)
@@ -20,9 +16,9 @@ class Robot:
         # move toward the center, if moving there would not put you in range of 2 robots
         target_pos = rg.toward(self.location, rg.CENTER_POINT)
         if 'obstacle' not in rg.loc_types(target_pos):
-            adjacent_to_target_enemies = self.robots_adjacent_to(target_pos, game, self.player_id, "!=")
-            #if len(adjacent_to_target_enemies) < 2:
-            return ['move', target_pos]
+            adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
+            if len(adjacent_to_target_enemies) < 2:
+            	return ['move', target_pos]
         
         # if we're in the center, stay put
         if self.location == rg.CENTER_POINT:
@@ -30,6 +26,24 @@ class Robot:
         
         return self.guard()
     
+    def guard():
+        return ['guard']
+    
+    
+    def get_adjacent_robots_to(self, some_location, game, player_comparator=None):
+ 
+        def generate():
+            for loc,bot in game.get('robots').items():
+                if rg.wdist(loc, some_location) <= 1:
+                    if player_comparator == None or player_comparator(self.player_id, bot.player_id):
+                        yield (loc, bot)
+ 
+        return dict(generate())
+            
+    def get_adjacent_robots(self, game, player_comparator=None):
+        return self.get_adjacent_robots_to(self.location, game, player_comparator)
+    
+    #deprecated function
     def robots_adjacent_to(position, game, of_player_id=None, player_comparator="=="):
         comparator_map = {}
         comparator_map["=="] = lambda a, b: a == b
@@ -42,16 +56,4 @@ class Robot:
                     adjacent_robots[loc] = bot
         return adjacent_robots
     
-    def guard():
-        return ['guard']
     
-    @staticmethod
-    def get_adjacent_robots(self, game, player_comparator=None):
- 
-        def generate():
-            for loc,bot in game.get('robots').items():
-                if rg.wdist(loc, self.location) <= 1:
-                    if player_comparator == None or player_comparator(self.player_id, bot.player_id):
-                        yield (loc, bot)
- 
-        return dict(generate())

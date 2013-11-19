@@ -26,7 +26,7 @@ class Robot:
         
         return self.guard()
     
-    def guard():
+    def guard(self):
         return ['guard']
     
     

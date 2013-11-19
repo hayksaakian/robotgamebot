@@ -5,7 +5,7 @@ class Robot:
     def act(self, game):        
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
-        adjacent_enemies = self.get_adjacent_robots(game, operator.__eq__)
+        adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
         
         # if there are enemies around, attack them
         if len(adjacent_enemies) > 0 and len(adjacent_enemies) < 3:

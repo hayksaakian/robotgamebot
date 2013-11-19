@@ -10,7 +10,7 @@ class Robot:
         # if there are enemies around, attack them
         if len(adjacent_enemies) > 0 and len(adjacent_enemies) < 3:
             return ['attack', list(adjacent_enemies.keys())[0]]
-        elif len(adjacent_enemies) >= 4:
+        elif len(adjacent_enemies) >= 3:
             return ['suicide']
             
         # move toward the center, if moving there would not put you in range of 2 robots

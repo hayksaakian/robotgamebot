@@ -15,9 +15,9 @@ class Robot:
             
         # move toward the center, if moving there would not put you in range of 2 robots
         target_pos = rg.toward(self.location, rg.CENTER_POINT)
-        if 'obstacle' not in rg.loc_types(target_pos):
-            adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
-            if self.location != target_pos:
+        if self.location != target_pos:
+            if 'obstacle' not in rg.loc_types(target_pos):
+                adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
                 if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
                     return ['move', target_pos]
         
@@ -30,7 +30,6 @@ class Robot:
     
     def guard(self):
         return ['guard']
-    
     
     def get_adjacent_robots_to(self, some_location, game, player_comparator=None):
  

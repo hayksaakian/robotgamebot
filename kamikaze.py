@@ -17,13 +17,15 @@ class Robot:
         target_pos = rg.toward(self.location, rg.CENTER_POINT)
         if 'obstacle' not in rg.loc_types(target_pos):
             adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
-            if len(adjacent_to_target_enemies) < 2:
-                return ['move', target_pos]
+            if self.location != rg.CENTER_POINT:
+                if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
+                    return ['move', target_pos]
         
         # if we're in the center, stay put
         if self.location == rg.CENTER_POINT:
             return self.guard()
         
+        #if we couldn't decide to do anything else, just guard
         return self.guard()
     
     def guard(self):
@@ -42,18 +44,3 @@ class Robot:
             
     def get_adjacent_robots(self, game, player_comparator=None):
         return self.get_adjacent_robots_to(self.location, game, player_comparator)
-    
-    #deprecated function
-    def robots_adjacent_to(position, game, of_player_id=None, player_comparator="=="):
-        comparator_map = {}
-        comparator_map["=="] = lambda a, b: a == b
-        comparator_map["!="] = lambda a, b: a != b
-        adjacent_robots = {}
-        comp_func = comparator_map[player_comparator]
-        for loc, bot in game.get('robots').items():
-            if rg.wdist(loc, position) <= 1:
-                if of_player_id == None or comp_func(of_player_id, bot.player_id):
-                    adjacent_robots[loc] = bot
-        return adjacent_robots
-    
-    

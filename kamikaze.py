@@ -39,13 +39,13 @@ class Robot:
 
         first_enemy_location = get_first_enemy_location()
         weakest_enemy_location = get_weakest_enemy_location()
-        weakest_adjacent_enemy = get_weakest_adjacent_enemy_location()
+        weakest_adjacent_enemy_location = get_weakest_adjacent_enemy_location()
 
         # if there are enemies around, attack them
         if len(adjacent_enemies) >= 1 and len(adjacent_enemies) < 3:
             if self.hp < 10:
                 return ['suicide']
-            return ['attack', weakest_adjacent_enemy]
+            return ['attack', weakest_adjacent_enemy_location]
         elif len(adjacent_enemies) >= 3:
             return ['suicide']
             

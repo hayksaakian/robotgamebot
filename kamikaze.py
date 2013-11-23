@@ -2,6 +2,11 @@ import rg
 import operator
 
 class Robot:
+    # act should take meta level as an argument
+    # meta=0 means don't consider what other bots might do
+    # meta=1 means consider what other bots might do,
+        # but not what they'll do as a consequence of you thinking about whay they'll do
+    # meta=2 is next level meta
     def act(self, game): 
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
@@ -22,6 +27,10 @@ class Robot:
         def get_weakest_adjacent_enemy(offset=0):
             return query(adjacent_enemies, lambda t: t[1].hp)[offset][1]
 
+        # For now we're a hunter
+        # we're going to target the weakest enemy first,
+        # unless there's somebody else closer, in which case we'll go for them
+
         # first_enemy_location = get_first_enemy_location()
         weakest_enemy = get_weakest_enemy()
         target_enemy = weakest_enemy
@@ -30,7 +39,7 @@ class Robot:
             weakest_adjacent_enemy = get_weakest_adjacent_enemy()
             target_enemy = weakest_adjacent_enemy
 
-        # move toward the center, if moving there would not put you in range of 2 robots
+        # move towards the weakest enemy
         target_pos = rg.toward(self.location, weakest_enemy.location)
 
         # figure out if any friendly robots would also want to move to our target
@@ -60,6 +69,7 @@ class Robot:
                 # return ['suicide']
 
             # if you could kill 2+ bots by suidiciding, do it
+            # TODO: subtract potential kills if allied bots would kill with normal attacks anyway
             potential_kills = 0
             for loc,bot in adjacent_enemies.items():
                 if bot.hp <= 15:
@@ -103,22 +113,6 @@ class Robot:
         
         #if we couldn't decide to do anything else, just guard
         return self.guard()
-    
-    def toward(curr, dest):
-        if curr == dest:
-            return curr
-
-        x0, y0 = curr
-        x, y = dest
-        x_diff, y_diff = x - x0, y - y0
-
-        if abs(x_diff) < abs(y_diff):
-            return (x0, y0 + y_diff / abs(y_diff))
-        elif abs(x_diff) == abs(y_diff):
-            # BROKEN FIX
-            return (0, 0)
-        else:
-            return (x0 + x_diff / abs(x_diff), y0)
 
     def guard(self):
         return ['guard']

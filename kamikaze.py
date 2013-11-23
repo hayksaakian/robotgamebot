@@ -8,58 +8,88 @@ class Robot:
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
 
         all_enemies = self.get_all_robots(game, operator.__ne__)
-        def get_weakest_enemy_location():
-            tgt = (0, 0)
-            min_hp = 1000
-            for loc,bot in all_enemies.items():
-                if bot.hp < min_hp:
-                    tgt = loc
-                    min_hp = bot.hp
-            return tgt
 
-        def get_first_enemy_location():
-            min_bot_id = 1000000
-            l = (9, 9)
-            for loc,bot in all_enemies.items():
-                if bot['player_id'] < min_bot_id:
-                    min_bot_id = bot['player_id']
-                    l = bot.location
-            # return list(all_enemies.keys())[offset]
-            return l
+        # "The value of the key parameter should be a function that takes 
+        # a single argument and returns a key to use for sorting purposes."
+        def query(bot_dict, sorting_function, offset=0):
+            organized = sorted(bot_dict.items(), key=sorting_function)
+            # returns a list of tuples, [(key, value),... ]
+            return organized
 
-        def get_weakest_adjacent_enemy_location():
-            l = (9, 9)
-            lowest_hp = 10000
-            for loc,bot in adjacent_enemies.items():
-                if bot.hp < lowest_hp:
-                    lowest_hp = bot.hp
-                    l = bot.location
-            # return list(all_enemies.keys())[offset]
-            return l
+        def get_weakest_enemy(offset=0):
+            return query(all_enemies, lambda t: t[1].hp)[offset][1]
 
-        first_enemy_location = get_first_enemy_location()
-        weakest_enemy_location = get_weakest_enemy_location()
-        weakest_adjacent_enemy_location = get_weakest_adjacent_enemy_location()
+        def get_weakest_adjacent_enemy(offset=0):
+            return query(adjacent_enemies, lambda t: t[1].hp)[offset][1]
 
-        # if there are enemies around, attack them
-        if len(adjacent_enemies) >= 1 and len(adjacent_enemies) < 3:
-            if self.hp < 10:
-                return ['suicide']
-            return ['attack', weakest_adjacent_enemy_location]
-        elif len(adjacent_enemies) >= 3:
-            return ['suicide']
-            
+        # first_enemy_location = get_first_enemy_location()
+        weakest_enemy = get_weakest_enemy()
+        target_enemy = weakest_enemy
+        
+        if len(adjacent_enemies) > 0:
+            weakest_adjacent_enemy = get_weakest_adjacent_enemy()
+            target_enemy = weakest_adjacent_enemy
+
         # move toward the center, if moving there would not put you in range of 2 robots
-        target_pos = rg.toward(self.location, weakest_enemy_location)
+        target_pos = rg.toward(self.location, weakest_enemy.location)
 
         # figure out if any friendly robots would also want to move to our target
         adjacent_to_target_friendlies = self.get_adjacent_robots_to(target_pos, game, operator.__eq__)
-        def has_priority():
+
+        # if there are enemies around, attack them
+        # also consider suiciding when it will guarantee a kill, meaning enemy < 15 hp
+        suicide_threshold = 3 # 3 is better than 4 with 83% confidence, 7-42, 10-34 vs 3-43, 7-38
+        # 4 is [55, 30, 15] against 3
+
+        def has_suicide_priority():
+            adjacent_allies_to_target_enemy = self.get_adjacent_robots(game, operator.__eq__)
+            weakest_allies_next_to_adjacent_target_enemy = query(adjacent_allies_to_target_enemy, lambda t: t[1].hp)
+            return self.location == weakest_allies_next_to_adjacent_target_enemy[0][0]
+
+        if len(adjacent_enemies) > 0 and len(adjacent_enemies) < suicide_threshold:
+            # following line is better by 102-20-17 over just self.hp < 10
+            # inspired by peterm's stupid 2.6 bot
+            # assuming all adjacent enemies attacked me, if I would die
+            # i should instead suicide
+            if self.hp < (10*len(adjacent_enemies)):
+                return ['suicide']
+            # IDEA: if i could kill the enemy with 1 suicide instead of two attacks
+            # NOTE: if multiple allies are going for this target, i'll actually lose too many bots
+            # bad idea, 0-20 against self
+            # if weakest_adjacent_enemy.hp < 15 and weakest_adjacent_enemy.hp > 8 and has_suicide_priority():
+                # return ['suicide']
+
+            # if you could kill 2+ bots by suidiciding, do it
+            potential_kills = 0
+            for loc,bot in adjacent_enemies.items():
+                if bot.hp <= 15:
+                    potential_kills += 1
+
+            if potential_kills >= 2:
+                return ['suicide']
+
+            # should also avoid over-killing robots
+            return ['attack', weakest_adjacent_enemy.location]
+        elif len(adjacent_enemies) >= suicide_threshold:
+            return ['suicide']
+            
+        # this function breaks on the server, 
+        # so it's temporarily not being used
+        # as the has_priority function
+        def byroboid_has_priority(): # if i'm a newer bot, I have priority
             for loc,bot in adjacent_to_target_friendlies.items():
-                their_target_pos = rg.toward(loc, weakest_enemy_location)
-                # check if bots will collide
+                their_target_pos = rg.toward(loc, weakest_enemy.location)
+                # check if bots would collide
                 if their_target_pos == target_pos:
-                    # if i'm more bottom or more to the right, i'll take priority
+                    if self.robot_id > bot.robot_id:
+                        return False
+            return True
+
+        def has_priority(): # if i'm more bottom or more to the right, i'll take priority
+            for loc,bot in adjacent_to_target_friendlies.items():
+                their_target_pos = rg.toward(loc, weakest_enemy.location)
+                # check if bots would collide
+                if their_target_pos == target_pos:
                     if self.location[0] < loc[0] or self.location[1] < loc[1]:
                         #don't move then, do something else
                         return False
@@ -70,12 +100,6 @@ class Robot:
                 adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
                 # if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
                 return ['move', target_pos]
-        
-        # if self.location == rg.CENTER_POINT
-            # return ['move', rg.toward(self.location, all_enemies[0].location)]
-        # if we're in the center, stay put
-        # if self.location == rg.CENTER_POINT:
-            # return self.guard()
         
         #if we couldn't decide to do anything else, just guard
         return self.guard()

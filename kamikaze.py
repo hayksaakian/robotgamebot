@@ -48,7 +48,7 @@ class Robot:
                     a_robot = game['robots'][loc]
                     if meta > 0 and a_robot.player_id == self.player_id:
                         rbot = Robot.new(a_robot)
-                        raction = rbot.act(game, 0)
+                        raction = rbot.act(game, meta-1)
                         if raction in ['move']:
                             return ['move', loc]
 
@@ -135,30 +135,33 @@ class Robot:
         # this function breaks on the server, 
         # so it's temporarily not being used
         # as the has_priority function
-        def byroboid_has_priority(): # if i'm a newer bot, I have priority
+        def has_priority(action): # if i'm a newer bot, I have priority
             for loc,bot in adjacent_to_target_friendlies.items():
-                their_target_pos = rg.toward(loc, weakest_enemy.location)
-                # check if bots would collide
-                if their_target_pos == target_pos:
-                    if self.robot_id > bot.robot_id:
+                mbot = Robot.new(bot)
+                maction = mbot.act(game, meta-1)
+                if maction == action:
+                    # self.robot_id is bugged out right now
+                    self_robot_id = game['robots'][self.location].robot_id
+                    if self_robot_id > bot.robot_id: # larger id means older robot
                         return False
             return True
 
-        def has_priority(): # if i'm more bottom or more to the right, i'll take priority
+        def byloc_has_priority(action): # if i'm more bottom or more to the right, i'll take priority
             for loc,bot in adjacent_to_target_friendlies.items():
-                their_target_pos = rg.toward(loc, weakest_enemy.location)
-                # check if bots would collide
-                if their_target_pos == target_pos:
+                mbot = Robot.new(bot)
+                maction = mbot.act(game, meta-1)
+                if maction == action:
                     if self.location[0] < loc[0] or self.location[1] < loc[1]:
                         #don't move then, do something else
                         return False
             return True
 
-        if self.location != target_pos and has_priority():
-            if 'obstacle' not in rg.loc_types(target_pos):
-                adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
-                # if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
-                return ['move', target_pos]
+        if self.location != target_pos:
+            if meta == 0 or has_priority(['move', target_pos]):
+                if 'obstacle' not in rg.loc_types(target_pos):
+                    adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
+                    # if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
+                    return ['move', target_pos]
         
         #if we couldn't decide to do anything else, just guard
         return self.guard()

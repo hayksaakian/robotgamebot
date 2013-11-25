@@ -13,6 +13,8 @@ class Node:
         self.walkable = walkable
 
 class Robot:
+    nodemap = []
+
     @staticmethod
     def new(robot_dict={}):
         bot = Robot()
@@ -35,12 +37,15 @@ class Robot:
         path = self.nice_find_path(self.location, rg.CENTER_POINT, game)
 
         # print(str(len(path))+" long path!!!")
+
+        print(path)
         if len(path) == 0:
-            # print("no path found!!!")
+            print("no path found!!!")
+            import sys
+            sys.exit(1)
             return ['guard']
         else:
             print("#############      awesome, we got a path      ###########")
-            print(path)
             target = tuple(path[1])
             print(target)
             # import sys
@@ -264,7 +269,7 @@ class Robot:
             return False
         # if it's a spawning turn
         # if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 1:
-            # return False
+        #     return False
         return True
 
     # def check_walkable(self, loc, game):
@@ -273,8 +278,6 @@ class Robot:
     #     # if it's a spawning turn
     #     if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
     #         return False
-
-    nodemap = []
 
     def generate_nodemap(self, game, board_size):
         # nodemap = []

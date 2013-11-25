@@ -7,7 +7,7 @@ class Node:
     by = None
     parent = None
 
-    def __init__(x, y, walkable=True):
+    def __init__(self, x, y, walkable=True):
         self.x = x
         self.y = y
         self.walkable = walkable
@@ -28,9 +28,24 @@ class Robot:
         # but not what they'll do as a consequence of you thinking about whay they'll do
     # meta=2 is next level meta
     def act(self, game):
-        path = self.find_path(self.location, rg.CENTER_POINT)
-        next_step = path.pop(0)
-        return ['move', tuple(next_step)]
+        board_size = (rg.CENTER_POINT[0] * 2) + 1
+        self.generate_nodemap(game, board_size)
+
+        path = self.nice_find_path(self.location, rg.CENTER_POINT, game)
+
+        # print(str(len(path))+" long path!!!")
+        if len(path) == 0:
+            # print("no path found!!!")
+            return ['guard']
+        else:
+            print("#############      awesome, we got a path      ###########")
+            print(path)
+            target = tuple(path[1])
+            print(target)
+            # import sys
+            # sys.exit(1)
+            return ['move', target]
+
 
     def goodact(self, game, meta=1): 
         adjacent_robots = self.get_adjacent_robots(game)
@@ -233,15 +248,17 @@ class Robot:
     # same idea as rg.toward but, this will consider other robots as path blockers
 
     '''
-    # Pathfinding
+    ##########################################################################################
+    # PATHFINDING STARTS HERE
     inspired by:
     https://github.com/qiao/PathFinding.js/blob/master/src/finders/BiBreadthFirstFinder.js
+    ##########################################################################################
     '''
 
     # bi-directional best first search pathfinder
     @staticmethod
     def check_walkable(loc, game):
-        if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(t_pos)), ('invalid' in rg.loc_types(t_pos))]:
+        if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
             return False
         # if it's a spawning turn
         if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
@@ -249,21 +266,39 @@ class Robot:
         return True
 
     # def check_walkable(self, loc, game):
-    #     if True in [('obstacle' in rg.loc_types(t_pos)), ('invalid' in rg.loc_types(t_pos))]:
+    #     if True in [('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
     #         return False
     #     # if it's a spawning turn
     #     if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
     #         return False
 
+    nodemap = []
+
+    def generate_nodemap(self, game, board_size):
+        nodemap = []
+        # print("generated a "+str(board_size)+" square grid")
+        for x in range(board_size):
+            self.nodemap.append([])
+            for y in range(board_size):
+                self.nodemap[x].append(Node(x, y, Robot.check_walkable((x, y), game)))
+
+
     @staticmethod 
-    def get_neighbors(node, game, allow_diagonal=False, dont_cross_corners=True):
-        x = node.x
-        y = node.y
+    def get_neighbors(node, grid, allow_diagonal=False, dont_cross_corners=True):
+        x0 = node.x
+        y0 = node.y
         neighbors = []
-        for loc in rg.locs_around((x, y)):
-            if Robot.check_walkable(loc, game):
-                neighbors.append(Node(lox[0], loc[1], True))
+        for loc in rg.locs_around((x0, y0)):
+            if loc != (x0, y0):
+                x = loc[0]
+                y = loc[1]
+                # print("checking "+str(x)+", "+str(y))
+                yes = grid[x][y].walkable
+                # print("-- "+str(yes))
+                if yes:
+                    neighbors.append(grid[x][y])
         # currently the code for diagonals is unnecessary and thus missing
+        # print("      getting "+str(len(neighbors))+" neighbors")
         if allow_diagonal == False:
             return neighbors
 
@@ -272,28 +307,27 @@ class Robot:
         path = [[node.x, node.y]]
         while node.parent:
             node = node.parent
-            path.push([node.x, node.y])
+            path.append([node.x, node.y])
 
         path.reverse()
         return path
 
     @staticmethod
     def bi_backtrace(node_a, node_b):
-        path_a = backtrace(node_a)
-        path_b = backtrace(node_b)
+        path_a = Robot.backtrace(node_a)
+        path_b = Robot.backtrace(node_b)
         path_b.reverse()
         return operator.add(path_a, path_b)
 
-    @staticmethod
-    def find_path(start, end, game):
-        return Robot.find_path(start[0], start[1], end[0], end[1], game)
+    def nice_find_path(self, start, end, game):
+        path = self.find_path(start[0], start[1], end[0], end[1], game)
+        return path
 
-    @staticmethod
-    def find_path(startX, startY, endX, endY, game):
+    def find_path(self, startX, startY, endX, endY, game):
         BY_START = 0
         BY_END = 1
-        start_node = Node(startX, startY, Robot.check_walkable((startX, startY), game))
-        end_node = Node(endX, endY, Robot.check_walkable((endX, endY), game))
+        start_node = self.nodemap[startX][startY]
+        end_node = self.nodemap[endX][endY]
         start_open_list = [start_node]
         end_open_list = [end_node]
 
@@ -303,9 +337,13 @@ class Robot:
         start_node.opened = True
         start_node.by = BY_START
         while (len(start_open_list) > 0) and (len(end_open_list) > 0):
+            # print("----------")
+            # print("searching "+str(len(start_open_list)) + " plus " + str(len(end_open_list))+" nodes")
+
             node = start_open_list.pop(0)
+            # print("    now  looking at "+str(node.x)+", "+str(node.y))
             node.closed = True
-            neighbors = Robot.get_neighbors(node, game, allow_diagonal=False, dont_cross_corners=True)
+            neighbors = Robot.get_neighbors(node, self.nodemap, allow_diagonal=False, dont_cross_corners=True)
             for neighbor in neighbors:
                 if neighbor.closed:
                     continue
@@ -313,85 +351,69 @@ class Robot:
                     # if this node has been inspected by the,
                     # reversed search, then a path has been found
                     if neighbor.by == BY_END:
-                        return bi_backtrace(node, neighbor)
+                        path = Robot.bi_backtrace(node, neighbor)
+                        return path
                     continue
-                start_open_list.append(neighbor)
                 neighbor.parent = node
                 neighbor.opened = True
                 neighbor.by = BY_START
+                start_open_list.append(neighbor)
 
-            # expaned end open list
+            # expand end open list
             node = end_open_list.pop(0)
+            # print("   also looking at "+str(node.x)+", "+str(node.y))
             node.closed = True
-            neighbors = Robot.get_neighbors(node, game, allow_diagonal=False, dont_cross_corners=True)
+            neighbors = Robot.get_neighbors(node, self.nodemap, allow_diagonal=False, dont_cross_corners=True)
             for neighbor in neighbors:
                 if neighbor.closed:
                     continue
                 if neighbor.opened:
                     if neighbor.by == BY_START:
-                        return bi_backtrace(neighbor, node)
+                        path = Robot.bi_backtrace(neighbor, node)
+                        return path
                     continue
-                end_open_list.append(neighbor)
                 neighbor.parent = node
                 neighbor.opened = True
                 neighbor.by = BY_END
+                end_open_list.append(neighbor)
 
         return []
 
 
-    @staticmethod
-    def make_path(curr, dest, game):
-        next_step = Robot.toward(curr, dest, game)
-        path = []
-        if next_step == dest:
+    # @staticmethod
+    # def make_path(curr, dest, game):
+    #     next_step = Robot.toward(curr, dest, game)
+    #     path = []
+    #     if next_step == dest:
 
+    # @staticmethod
+    # def toward(curr, dest, game):
 
-    @staticmethod
-    def toward(curr, dest, game):
+    #     if curr == dest:
+    #         return curr
 
-        if curr == dest:
-            return curr
+    #     x0, y0 = curr
+    #     x, y = dest
+    #     x_diff, y_diff = x - x0, y - y0
 
-        x0, y0 = curr
-        x, y = dest
-        x_diff, y_diff = x - x0, y - y0
+    #     next_step = (0, 0)
+    #     def h_move():
+    #         return (x0 + x_diff / abs(x_diff), y0)
 
-        next_step = (0, 0)
-        def h_move():
-            return (x0 + x_diff / abs(x_diff), y0)
+    #     def v_move():
+    #         return  (x0, y0 + y_diff / abs(y_diff))
 
-        def v_move():
-            return  (x0, y0 + y_diff / abs(y_diff))
+    #     if abs(x_diff) < abs(y_diff):
+    #         next_step = v_move()
+    #     else abs(x_diff) > abs(y_diff):
+    #         next_step = h_move()
+    #     # elif abs(x_diff) == abs(y_diff):
+    #     #     if x0 > y0:
+    #     #         if 
+    #     #         next_step = 
 
-        if abs(x_diff) < abs(y_diff):
-            next_step = v_move()
-        else abs(x_diff) > abs(y_diff):
-            next_step = h_move()
-        # elif abs(x_diff) == abs(y_diff):
-        #     if x0 > y0:
-        #         if 
-        #         next_step = 
-
-
-
-        if x_diff <= 1 and y_diff <= 1:
-            return next_step
-
-
-
-
-
-    def toward(curr, dest):
-        if curr == dest:
-            return curr
-
-        x0, y0 = curr
-        x, y = dest
-        x_diff, y_diff = x - x0, y - y0
-
-        if abs(x_diff) < abs(y_diff):
-            return (x0, y0 + y_diff / abs(y_diff))
-        return (x0 + x_diff / abs(x_diff), y0)
+    #     # if x_diff <= 1 and y_diff <= 1:
+    #     return next_step
 
     def guard(self):
         return ['guard']

@@ -13,7 +13,9 @@ class Node:
         self.walkable = walkable
 
 class Robot:
-    nodemap = []
+
+    def __init__(self):
+        self.nodemap = []
 
     @staticmethod
     def new(robot_dict={}):
@@ -40,7 +42,7 @@ class Robot:
 
         print(path)
         if len(path) == 0:
-            print("no path found!!!")
+            print("no path found!!! from "+str(self.location))
             import sys
             sys.exit(1)
             return ['guard']

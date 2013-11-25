@@ -64,11 +64,21 @@ class Robot:
             weakest_adjacent_enemy = get_weakest_adjacent_enemy()
             target_enemy = weakest_adjacent_enemy
 
+        # STRATEGY HERE:
         # move towards the weakest enemy
-        target_pos = rg.toward(self.location, target_enemy.location)
+        ultimate_target = target_enemy.location
+
+        target_pos = rg.toward(self.location, ultimate_target)
 
         # figure out if any friendly robots would also want to move to our target
         adjacent_to_target_friendlies = self.get_adjacent_robots_to(target_pos, game, operator.__eq__)
+
+
+        '''
+        # ###############
+        # Offensive Code
+        # ###############
+        '''
 
         # if there are enemies around, attack them
         # also consider suiciding when it will guarantee a kill, meaning enemy < 15 hp
@@ -156,12 +166,39 @@ class Robot:
                         return False
             return True
 
-        if self.location != target_pos:
-            if meta == 0 or has_priority(['move', target_pos]):
-                if 'obstacle' not in rg.loc_types(target_pos):
-                    adjacent_to_target_enemies = self.get_adjacent_robots_to(target_pos, game, operator.__ne__)
-                    # if len(adjacent_to_target_enemies) <= 1 or len(adjacent_to_target_enemies) >= 3:
-                    return ['move', target_pos]
+
+        '''
+        # ###############
+        # Movement Code
+        # ###############
+        '''
+        def is_move_possible(robot, t_pos):
+            # determine if the tile is even walkable
+            if True in [(robot.location == t_pos), ('obstacle' in rg.loc_types(t_pos)), ('invalid' in rg.loc_types(t_pos))]:
+                return False
+            # determine if the IS OCCUPIED and/or WILL STAY occupied
+            if (meta == 0 or has_priority(['move', t_pos])) and t_pos in game['robots']:
+                if meta > 0 and t_pos in all_friendlies:
+                    rbot = Robot.new(all_friendlies[t_pos])
+                    raction = rbot.act(game, meta-1)
+                    # figure out if ally will move out of the way
+                    if raction[0] == 'suicide':
+                        return True
+                    elif raction[0] == 'move' and raction[1] not in [t_pos, robot.location]:
+                        return True
+                return False
+            return True
+
+        if is_move_possible(self, target_pos):
+            return ['move', target_pos]
+        else:
+            alternatives = {}
+            for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
+                if loc != target_pos and is_move_possible(self, loc):
+                    alternatives[loc] = rg.wdist(self.location, loc)
+            if len(alternatives) > 0:
+                best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
+                return ['move', best_alt]
         
         #if we couldn't decide to do anything else, just guard
         return self.guard()

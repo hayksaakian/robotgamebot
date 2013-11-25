@@ -29,6 +29,7 @@ class Robot:
     # meta=2 is next level meta
     def act(self, game):
         board_size = (rg.CENTER_POINT[0] * 2) + 1
+        # print("board is "+str(board_size)+" large")
         self.generate_nodemap(game, board_size)
 
         path = self.nice_find_path(self.location, rg.CENTER_POINT, game)
@@ -258,11 +259,12 @@ class Robot:
     # bi-directional best first search pathfinder
     @staticmethod
     def check_walkable(loc, game):
-        if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
+        # if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
+        if True in [('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
             return False
         # if it's a spawning turn
-        if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
-            return False
+        # if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 1:
+            # return False
         return True
 
     # def check_walkable(self, loc, game):
@@ -275,12 +277,13 @@ class Robot:
     nodemap = []
 
     def generate_nodemap(self, game, board_size):
-        nodemap = []
+        # nodemap = []
         # print("generated a "+str(board_size)+" square grid")
         for x in range(board_size):
             self.nodemap.append([])
             for y in range(board_size):
                 self.nodemap[x].append(Node(x, y, Robot.check_walkable((x, y), game)))
+        # return nodemap
 
 
     @staticmethod 

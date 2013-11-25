@@ -170,6 +170,9 @@ class Robot:
         '''
         # ###############
         # Movement Code
+        todo:
+        dodge enemy suicides
+        if i'm moving towards X, he will preemptively attack the spot i will occupy
         # ###############
         '''
         def is_move_possible(robot, t_pos):

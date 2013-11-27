@@ -1,5 +1,10 @@
 import rg
 import operator
+from time import time
+import heapq
+import sys
+import random
+import math
 
 class Node(object):
     def __init__(self, x, y, walkable=True):
@@ -14,27 +19,44 @@ class Node(object):
 class Robot:
     """
     # NOTE: This is a god damned LIE
-    # robots are not actually instantiated, he only ever creates one robot, 
-    # and then gives it 
+    # robots are not actually instantiated, it only ever creates one robot, 
+    # and then changes it's attributes and calls .act
     """
-    def __init__(self):
-        self.nodemap = []
+    # def __init__(self):
+    #     self.nodemap = []
 
-    def act(self, game):
-        self.__init__() #Calling __init__ because of LIES
+    def testact(self, game, meta=1):
+        # self.__init__() #Calling __init__ because of LIES
+        target = rg.CENTER_POINT
 
-        board_size = (rg.CENTER_POINT[0] * 2) + 1
-        self.generate_nodemap(game, board_size)
+        if self.location == target:
+            return self.guard()
 
-        path = self.nice_find_path(self.location, rg.CENTER_POINT, game)
-        # print(path)
-        if len(path) == 0:
-            print("no path found!!! from "+str(self.location))
-            return ['guard']
-        else:
-            # print("#############      awesome, we got a path      ###########")
-            target = tuple(path[1])
-            return ['move', target]
+        for loc, bot in game.get('robots').items():
+            if bot.player_id != self.player_id:
+                if rg.dist(loc, self.location) <= 1:
+                    return self.attack(loc)
+
+        t0 = time()
+        path = astar_find_path(self.location, target)
+        t = time()
+        print("A Star Pathfinding took "+str((t-t0)*1000)+" milliseconds. "+str(len(path))+" steps.")
+
+        next_step = path[1]
+        
+        # t0 = time()
+        # path = self.nice_find_path(self.location, target, game)
+        # t = time()
+        # print("Best-First Pathfinding took "+str((t-t0)*1000)+" milliseconds. "+str(len(path))+" steps.")
+
+        if len(path) > 1:
+
+            print(next_step)
+            print("#############      awesome, we got a path      ###########")
+            return self.move(next_step)
+
+        print("CRAP: No path found from "+str(self.location))
+        return self.guard()
 
     @staticmethod
     def new(robot_dict={}):
@@ -50,7 +72,7 @@ class Robot:
     # meta=1 means consider what other bots might do,
         # but not what they'll do as a consequence of you thinking about whay they'll do
     # meta=2 is next level meta
-    def goodact(self, game, meta=1): 
+    def act(self, game, meta=1): 
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
@@ -63,8 +85,9 @@ class Robot:
         def query(bot_dict, sorting_function, offset=0):
             organized = sorted(bot_dict.items(), key=sorting_function)
             # returns a list of tuples, [(key, value),... ]
+            if len(organized) == 0:
+                print('found nothing')
             return organized
-
         def get_weakest_enemy(offset=0):
             return query(all_enemies, lambda t: t[1].hp)[offset][1]
 
@@ -86,6 +109,9 @@ class Robot:
                         if raction in ['move']:
                             return ['move', loc]
 
+        if len(all_enemies) == 0:
+            print('---$$$$$      There are no enemies remaining!      $$$$$---')
+
         # For now we're a hunter
         # we're going to target the weakest enemy first,
         # unless there's somebody else closer, in which case we'll go for them
@@ -102,10 +128,14 @@ class Robot:
         # move towards the weakest enemy
         ultimate_target = target_enemy.location
 
-        target_pos = rg.toward(self.location, ultimate_target)
+        path = astar_find_path(self.location, ultimate_target)
 
-        # figure out if any friendly robots would also want to move to our target
-        adjacent_to_target_friendlies = self.get_adjacent_robots_to(target_pos, game, operator.__eq__)
+        next_step = path[1]
+
+        # next_step = rg.toward(self.location, ultimate_target)
+
+        # figure out if any friendly robots are near our next step, this includes us
+        adjacent_to_target_friendlies = self.get_adjacent_robots_to(next_step, game, operator.__eq__)
 
         '''
         # ###############
@@ -161,13 +191,20 @@ class Robot:
             if meta > 0:
                 # subtract potential kills if allied bots would 
                 # kill the target with normal attacks anyway
+                simul_attackers = 0
                 for loc,bot in adjacent_to_target_friendlies.items():
-                    metabot = Robot.new(bot)
-                    metaaction = metabot.act(game, meta-1)
+                    if loc == self.location:
+                        metaaction = self.attack(target_enemy.location)
+                    else:
+                        metabot = Robot.new(bot)
+                        metaaction = metabot.act(game, meta-1)
+
                     if metaaction[0] == 'attack':
                         if metaaction[1] == target_enemy.location:
-                            if target_enemy.hp <= (rg.settings.attack_range[0]*2):
-                                potential_kills -= 1
+                            simul_attackers += 1
+
+                if target_enemy.hp <= (rg.settings.attack_range[0]*simul_attackers):
+                    potential_kills -= 1
 
             if potential_kills >= 1.5:
                 return ['suicide']
@@ -176,23 +213,31 @@ class Robot:
             return ['attack', weakest_adjacent_enemy.location]
         elif len(adjacent_enemies) >= suicide_threshold:
             return ['suicide']
-            
-        # this function breaks on the server, 
-        # so it's temporarily not being used
-        # as the has_priority function
-        def has_priority(action): # if i'm a newer bot, I have priority
+
+        '''
+        # ###############
+        # Movement Code
+        conflict resolution is still buggy
+            if a and b want to go to L, and L is already occupied by c,
+            c gets out, but a and b hit each other
+
+        todo:
+        dodge enemy suicides
+        dodge preemtive attacks against me
+        # ###############
+        '''
+
+        # if i'm a newer bot, I have priority
+        def has_priority(action): 
             for loc,bot in adjacent_to_target_friendlies.items():
+                if self.robot_id == bot.robot_id:
+                    continue
                 mbot = Robot.new(bot)
                 maction = mbot.act(game, meta-1)
                 if maction == action:
-                    # self.robot_id is bugged out right now
-                    self_robot_id = game['robots'][self.location].robot_id
-                    print("resolving priority, self: "),
-                    print(self_robot_id),
-                    print("vs"),
-                    print(bot.robot_id)
-                    print(self_robot_id > bot.robot_id)
-                    if self_robot_id > bot.robot_id: # larger id means older robot
+                    # print("resolving priority, "+str(self.robot_id)+" at "+str(self.location)+"vs"+str(bot.robot_id)+" at "+str(bot.location))
+                    winrar = self.robot_id < bot.robot_id
+                    if winrar == False:
                         return False
             return True
 
@@ -206,41 +251,60 @@ class Robot:
                         return False
             return True
 
-        '''
-        # ###############
-        # Movement Code
-        todo:
-        dodge enemy suicides
-        dodge preemtive attacks against me
-        priority is not actually resolving conflicted moves for some reason
-        if i'm moving towards X, he will preemptively attack the spot i will occupy
-        # ###############
-        '''
         def is_move_possible(robot, t_pos):
             # determine if the tile is even walkable
-            if True in [(robot.location == t_pos), ('obstacle' in rg.loc_types(t_pos)), ('invalid' in rg.loc_types(t_pos))]:
+            if not self.check_walkable(t_pos, game):
                 return False
             # determine if the IS OCCUPIED and/or WILL STAY occupied
-            if (meta == 0 or has_priority(['move', t_pos])) and t_pos in game['robots']:
-                if meta > 0 and t_pos in all_friendlies:
-                    rbot = Robot.new(all_friendlies[t_pos])
+
+            if (t_pos in game['robots']): # is currently occupied
+                bot = game['robots'][t_pos]
+                if meta > 0 and bot.player_id == self.player_id:
+                    # let's see if an ally will move out of the way, to let us pass
+                    rbot = Robot.new(bot)
                     raction = rbot.act(game, meta-1)
+                    # should be fine, but may want to test above
                     # figure out if ally will move out of the way
+                    if raction[0] in ['attack', 'guard']:
+                        return False
+
                     if raction[0] == 'suicide':
-                        return True
-                    elif raction[0] == 'move' and raction[1] not in [t_pos, robot.location]:
-                        return True
-                return False
+                        # return True # don't return because other reasons may prevent uis from moving
+                        seomthing = True
+                    elif (raction[0] == 'move'): # maybe also check if it's not moving towrds us
+                        seomthing = True
+                        # return True # don't return because other reasons may prevent uis from moving
+                else:
+                    return False
+
+            if meta > 0:
+                if not has_priority(['move', t_pos]):
+                    # print("#"+str(self.robot_id)+" @ "+str(self.location)+' cannot move due to priority')
+                    return False
+
+            # if (t_pos in game['robots']) or (meta == 0 or has_priority(['move', t_pos])):
+            #     if meta > 0 and t_pos in adjacent_to_target_friendlies:
+            #         rbot = Robot.new(all_friendlies[t_pos])
+            #         raction = rbot.act(game, meta-1)
+            #         # figure out if ally will move out of the way
+            #         if raction[0] == 'suicide':
+            #             # return True
+            #         elif raction[0] == 'move' and raction[1] not in [t_pos, robot.location]:
+            #             # return True
+            #     else:
+            #         return False
+
             return True
 
 
-        if is_move_possible(self, target_pos):
-            return ['move', target_pos]
+        if is_move_possible(self, next_step):
+            return ['move', next_step]
         else:
+            # print('considering alternatives')
             alternatives = {}
             for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
-                if loc != target_pos and is_move_possible(self, loc):
-                    alternatives[loc] = rg.wdist(self.location, loc)
+                if loc != next_step and is_move_possible(self, loc):
+                    alternatives[loc] = rg.dist(self.location, loc)
             if len(alternatives) > 0:
                 best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
                 return ['move', best_alt]
@@ -248,17 +312,43 @@ class Robot:
         #if we couldn't decide to do anything else, just guard
         return self.guard()
 
-    # same idea as rg.toward but, this will consider other robots as path blockers
 
-    '''
-    ##########################################################################################
-    # PATHFINDING STARTS HERE
-    inspired by:
-    https://github.com/qiao/PathFinding.js/blob/master/src/finders/BiBreadthFirstFinder.js
-    ##########################################################################################
-    '''
+    # interface to robot action, in case the API changes
+    ############################################################
+    def guard(self):
+        return ['guard']
 
-    # bi-directional best first search pathfinder
+    def attack(self, loc):
+        return ['attack', loc]
+
+    def move(self, loc):
+        return ['move', loc]
+
+    ############################################################
+    
+    def get_all_robots(self, game, player_comparator=None, exclusive=False):
+        def generate():
+            for loc,bot in game.get('robots').items():
+                if loc != self.location or exclusive == False:
+                    if player_comparator == None or player_comparator(self.player_id, bot.player_id):
+                        yield (loc, bot)
+
+        return dict(generate())
+
+    # NOTE: Excludes the location in question!
+    def get_adjacent_robots_to(self, some_location, game, player_comparator=None, exclusive=True):
+        def generate():
+            for loc,bot in game.get('robots').items():
+                if loc != some_location or exclusive == False:
+                    if rg.wdist(loc, some_location) <= 1:
+                        if player_comparator == None or player_comparator(self.player_id, bot.player_id):
+                            yield (loc, bot)
+     
+        return dict(generate())
+            
+    def get_adjacent_robots(self, game, player_comparator=None):
+        return self.get_adjacent_robots_to(self.location, game, player_comparator)
+
 
     def check_walkable(self, loc, game):
         # if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
@@ -276,8 +366,21 @@ class Robot:
     #     if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
     #         return False
 
+
+    # same idea as rg.toward but, this will consider other robots as path blockers
+
+    '''
+    ##########################################################################################
+    # PATHFINDING STARTS HERE
+    inspired by:
+    bi-directional best first search pathfinder:
+
+    https://github.com/qiao/PathFinding.js/blob/master/src/finders/BiBreadthFirstFinder.js
+    ##########################################################################################
+    '''
+
     def generate_nodemap(self, game, board_size):
-        # nodemap = []
+        self.nodemap = []
         # print("generated a "+str(board_size)+" square grid")
         for x in range(board_size):
             self.nodemap.append([])
@@ -306,10 +409,10 @@ class Robot:
             return neighbors
 
     def backtrace(self, node):
-        path = [[node.x, node.y]]
+        path = [(node.x, node.y)]
         while node.parent:
             node = node.parent
-            path.append([node.x, node.y])
+            path.append((node.x, node.y))
 
         path.reverse()
         return path
@@ -321,6 +424,8 @@ class Robot:
         return operator.add(path_a, path_b)
 
     def nice_find_path(self, start, end, game):
+        board_size = (rg.CENTER_POINT[0] * 2) + 1
+        self.generate_nodemap(game, board_size)
         path = self.find_path(start[0], start[1], end[0], end[1], game)
         return path
 
@@ -390,33 +495,390 @@ class Robot:
 
         return []
 
-    def guard(self):
-        return ['guard']
-    
-    def get_all_robots(self, game, player_comparator=None, exclusive=False):
-        def generate():
-            for loc,bot in game.get('robots').items():
-                if loc != self.location or exclusive == False:
-                    if player_comparator == None or player_comparator(self.player_id, bot.player_id):
-                        yield (loc, bot)
-
-        return dict(generate())
-
-    # NOTE: Excludes the location in question!
-    def get_adjacent_robots_to(self, some_location, game, player_comparator=None, exclusive=True):
-        def generate():
-            for loc,bot in game.get('robots').items():
-                if loc != some_location or exclusive == False:
-                    if rg.wdist(loc, some_location) <= 1:
-                        if player_comparator == None or player_comparator(self.player_id, bot.player_id):
-                            yield (loc, bot)
-     
-        return dict(generate())
-            
-    def get_adjacent_robots(self, game, player_comparator=None):
-        return self.get_adjacent_robots_to(self.location, game, player_comparator)
-
-
 # kill switch
 # import sys
 # sys.exit(1)
+
+'''
+##########################################################################################
+# PATHFINDING Continues HERE
+inspired by:
+a start pathfinder
+
+https://github.com/eshira/kapal
+##########################################################################################
+changes: 
+kapal.inf -> inf
+
+combined all files into one
+
+commented out imports
+'''
+# __init__.py
+##########################################################################################
+inf = 1e100
+##########################################################################################
+
+# state.py
+##########################################################################################
+# import kapal
+
+class State:
+    pass
+
+class State2d(State):
+    def __init__(self, x=0, y=0):
+        self.y = y
+        self.x = x
+    def __str__(self):
+        return "(" + str(self.x) + ", " + str(self.y) + ")"
+
+class State2dAStar(State2d):
+    def __init__(self, x=0, y=0, g=inf, h=0, bp=None):
+        State2d.__init__(self, x, y)
+        self.g = g
+        self.h = h
+        self.bp = bp
+    
+    def reset(self):
+        self.g = inf
+
+    def __cmp__(self, other):
+        # TODO: allow any key function?
+        # heapq library is a min heap
+        self_f = self.g + self.h
+        other_f = other.g + other.h
+        if self_f < other_f or (self_f == other_f and self.g > other.g):
+            # priority(self) > priority(other), so self < other
+            return -1
+        elif self_f == other_f and self.g == other.g:
+            return 0
+        return 1
+
+    def __str__(self):
+        s = State2d.__str__(self) + "-->"
+        if self.bp is None:
+            s += "None"
+        else:
+            s += State2d.__str__(self.bp)
+        s += ": g = " + str(self.g) + "; h = " + str(self.h)
+        return s
+##########################################################################################
+
+
+# world.py
+##########################################################################################
+# from state import *
+
+class World:
+    """
+    World is the base class for all other world types.
+    This class shows the primitive functions that all other worlds
+    should implement.
+
+    An algorithm may assume that all the functions defined here are
+    implemented for any world.
+    """
+    def succ(self, s):
+        """
+        Returns the successors of state s.
+        """
+        pass
+    def pred(self, s):
+        """
+        Returns the predecessors of state s.
+        """
+        pass
+    def c(self, s1, s2):
+        """
+        Returns the cost of moving from s1 to s2.
+        """
+        pass
+    def h(self, s1, s2):
+        """
+        Returns the heuristic cost of s1 to s2.
+        """
+        pass
+    def change_c(self, s1, s2, c):
+        """
+        Change the cost of moving from s1 to s2.
+        """
+        pass
+    def reset(self):
+        """
+        An algorithm may reset the world. That is, the world
+        forgets all previous knowledge and starts planning
+        'from scratch'.
+        """
+        pass
+
+class World2d(World):
+    """
+    World2d is a tile-based 2-d world representation.
+    """
+
+    def __init__(self, costs=None, state_type=State2d, diags=False, diags_mult=1.42):
+        self.states = []
+        self.costs = costs
+        self.diags = diags
+        self.diags_mult = diags_mult
+
+        for r in range(len(costs)):
+            world_l = []
+            self.states.append(world_l)
+            for c in range(len(costs[r])):
+                world_l.append(state_type(r, c))
+
+    def succ(self, s):
+        # order: [1][2][3]        [ ][1][ ]
+        #        [4][ ][5]   or   [2][ ][3]
+        #        [6][7][8]        [ ][4][ ]
+
+        succs = []
+        for i in range(-1, 2):
+            x = s.x + i
+            for j in range(-1, 2):
+                y = s.y + j 
+                if not self.in_bounds(x, y):    # out of bounds
+                    continue
+                if x == s.x and y == s.y:   # self cannot have self as neigh
+                    continue
+                cost = self.costs[x][y]
+                edge_count = abs(i) + abs(j)
+                if edge_count == 2 and not self.diags:
+                    continue    # ignore diags if requested
+                elif edge_count == 2:
+                    cost *= self.diags_mult     # diags allowed, so mult cost
+                succs.append((self.states[x][y], cost))
+        return succs
+
+    def pred(self, s):
+        return self.succ(s)
+
+    def c(self, s1, s2):
+        return costs[s2.x][s2.y]
+
+    def h(self, s1, s2):
+        # if self.diags:
+        dy = abs(s2.y - s1.y)
+        dx = abs(s2.x - s1.x)
+        return math.sqrt(dx**2 + dy**2)
+        # else:
+        #     return abs(s2.y-s1.y) + abs(s2.x-s1.x)
+
+    def change_c(self, s1, s2, c):
+        if not self.in_bounds(s2.x, s2.y):
+            return False
+        self.costs[s2.x][s2.y] = c
+        return True
+
+    def reset(self):
+        for r in self.states:
+            for c in r:
+                c.reset()
+
+    def state(self, x, y):
+        return self.states[x][y]
+
+    def in_bounds(self, x, y):
+        size_x, size_y = self.size()
+        return y >= 0 and y < size_y and x >= 0 and x < size_x
+
+    def size(self, col = 0):
+        return (len(self.states), len(self.states[col]))
+
+    def __str__(self):
+        s = "World2d\n"
+        s += "x size: " + str(len(self.states)) + "\n"
+        s += "y size: " + str(len(self.states[0])) + "\n"
+        return s
+##########################################################################################
+
+
+# algo.py
+##########################################################################################
+# import heapq
+# from state import *
+# from world import *
+import sys
+class Algo:
+    """
+    A base class for algorithms.
+
+    All algorithms should inherit Algo and should overwrite Algo.plan.
+    """
+    def __init__(self, world, start, goal):
+        self.world = world
+        self.start = start
+        self.goal = goal
+    def plan(self):
+        pass
+
+class AStar(Algo):
+    """
+    A* algorithm.
+
+    A* makes a couple of assumptions:
+        - non-negative edge weights
+        - heuristics function is consistent (and thus admissible)
+            - http://en.wikipedia.org/wiki/Consistent_heuristic
+    """
+
+    def __init__(self, world, start=None, goal=None, backwards=True):
+        Algo.__init__(self, world, start, goal)
+        self.backwards = backwards
+        self.open = []
+
+    def plan(self):
+        """
+        Plans and returns the optimal path, from start to goal.
+        """
+        return list(self.__plan_gen())
+
+    def __plan_gen(self):
+        """
+        Plans the optimal path via a generator.
+
+        A generator that yields states as it is popped off
+        the open list, which is the optimal path in A* assuming
+        all assumptions regarding heuristics are held.
+
+        The user should not call AStar.__plan_gen. Call
+        AStar.plan instead. This is a generator for the sake of
+        easy debugging; it is usually unsafe to use the yielded
+        states as the path.
+        """
+        self.world.reset()      # forget previous search's g-vals
+        goal = self.goal
+        succ = self.world.succ  # successor function
+
+        if self.backwards:
+            self.goal.g = 0
+            self.open = [self.goal]
+            goal = self.start
+            succ = self.world.pred  # flip map edges
+        else:
+            self.start.g = 0
+            self.open = [self.start]
+
+        # A*
+        s = None
+        while s is not goal and len(self.open) > 0:
+            s = heapq.heappop(self.open)
+            for n, cost in succ(s):
+                if n.g > s.g + cost:
+                    # s improves n
+                    n.g = s.g + cost
+                    n.h = self.h(n, goal)
+                    n.bp = s
+                    heapq.heappush(self.open, n)
+            yield s
+
+    def path(self):
+        """
+        Returns the path from goal to the first state with bp = None.
+
+        This method assumes that 
+        """
+        p = []
+        s = self.goal
+        if self.backwards:
+            s = self.start
+        while s is not None:
+            p.append(s)
+            if s is not None:
+                s = s.bp
+        return p
+        
+    def h(self, s1, s2, h_func=None):
+        """
+        Returns the heuristic value between s1 and s2.
+
+        Uses h_func, a user-defined heuristic function, if
+        h_func is passed in.
+        """
+        if h_func is None:
+            return self.world.h(s1, s2)
+        else:
+            return h_func(s1, s2)
+
+class Dijkstra(AStar):
+    """
+    Classic Dijkstra search.
+
+    Assumptions:
+        - non-negative edge weights
+    """
+    def h(self, s1, s2, h_func=None):
+        return 0
+
+def rand_cost_map(x_size=1, y_size=1,  min_val=1, max_val=inf,
+        flip=False, flip_chance=.1):
+    """
+    Returns a 2d cost matrix with random values.
+
+    Args:
+        y_size - width
+        x_size - height
+        min_val - minimum random value
+        max_val - maximum random value
+        flip - if True, then the value in each cell is either min_val
+               or max_val;
+               if False, then min_val <= value of cell <= max_val
+        flip_chance - chance of getting a max_val (only if flip=True)
+    """
+    grid = []
+    for i in range(x_size):
+        row = []
+        for j in range(y_size):
+            if flip:
+                if random.random() < flip_chance:
+                    row.append(max_val) 
+                else:
+                    row.append(min_val)
+            else:
+                row.append(random.randint(min_val, max_val))
+        grid.append(row)
+    return grid
+
+
+def check_walkable(loc, game=None):
+    if not set(rg.loc_types(loc)).isdisjoint(set(['invalid', 'obstacle'])):
+        return False
+    if game and game['robots'][loc]:
+        return False
+    return True
+
+def draw_map(dimensions=(10, 10), min_val=1, max_val=inf, game=None):
+    x_size, y_size = dimensions
+    grid = []
+    for i in range(x_size):
+        row = []
+        for j in range(y_size):
+            val = 1
+            if check_walkable((i, j), game):
+                row.append(min_val)
+            else:
+                row.append(max_val)
+        grid.append(row)
+    return grid
+
+def astar_find_path(start=(3, 9), end=(9, 9), game=None):
+    start_time = time()
+
+    n = (rg.CENTER_POINT[0] * 2) + 1
+    c = draw_map((n, n), 1, inf, game)
+    w = World2d(c, state_type = State2dAStar)
+
+    astar = AStar(w, w.state(end[0], end[1]), w.state(start[0], start[1]))
+    path = astar.plan()
+
+    total_time = time() - start_time
+
+    dumbpath = map(lambda p: (p.x, p.y), path)
+    # print("A Star Pathfinding took "+str((total_time)*1000)+" milliseconds. "+str(len(dumbpath))+" steps.")
+    return dumbpath
+
+
+
+##########################################################################################

@@ -16,6 +16,8 @@ class Node(object):
         self.by = None
         self.parent = None
 
+timings = {}
+
 class Robot:
     """
     # NOTE: This is a god damned LIE
@@ -72,7 +74,21 @@ class Robot:
     # meta=1 means consider what other bots might do,
         # but not what they'll do as a consequence of you thinking about whay they'll do
     # meta=2 is next level meta
-    def act(self, game, meta=1): 
+    def act(self, game, meta=1):
+        ts = time()
+        action = self.realact(game, meta)
+        tf = time()
+        ms = round((tf-ts)*1000, 4)
+        turn = game['turn']
+        if turn in timings:
+            timings[turn] += ms
+        else:
+            if (turn-1) in timings:
+                print("turn "+str(turn-1)+" took "+str(timings[(turn-1)])+" milliseconds")
+            timings[turn] = ms
+        return action
+
+    def realact(self, game, meta=1): 
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)

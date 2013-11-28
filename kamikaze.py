@@ -27,7 +27,7 @@ class Robot:
     # def __init__(self):
     #     self.nodemap = []
 
-    def testact(self, game, meta=1):
+    def testact(self, game, meta=2):
         # self.__init__() #Calling __init__ because of LIES
         target = rg.CENTER_POINT
 
@@ -74,7 +74,7 @@ class Robot:
     # meta=1 means consider what other bots might do,
         # but not what they'll do as a consequence of you thinking about whay they'll do
     # meta=2 is next level meta
-    def act(self, game, meta=1):
+    def timingact(self, game, meta=2):
         ts = time()
         action = self.realact(game, meta)
         tf = time()
@@ -88,7 +88,7 @@ class Robot:
             timings[turn] = ms
         return action
 
-    def realact(self, game, meta=1): 
+    def act(self, game, meta=2): 
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
@@ -140,6 +140,9 @@ class Robot:
             weakest_adjacent_enemy = get_weakest_adjacent_enemy()
             target_enemy = weakest_adjacent_enemy
 
+        # def nearest_of_x_weakest_enemies(x=3):
+
+
         # STRATEGY HERE:
         # move towards the weakest enemy
         ultimate_target = target_enemy.location
@@ -189,7 +192,7 @@ class Robot:
             for loc,bot in adjacent_enemies.items():
                 if bot.hp <= rg.settings.suicide_damage:
                     potential_kills += 1
-                if meta > 0:
+                if meta > 1:
                     # consider likelihood of enemy running away, 
                     # we'll assume the other guy is smart if he's winning
                     smart = len(all_enemies) > len(all_friendlies)
@@ -222,6 +225,9 @@ class Robot:
                 if target_enemy.hp <= (rg.settings.attack_range[0]*simul_attackers):
                     potential_kills -= 1
 
+
+
+
             if potential_kills >= 1.5:
                 return ['suicide']
 
@@ -234,11 +240,12 @@ class Robot:
         # ###############
         # Movement Code
         conflict resolution is still buggy
-            if a and b want to go to L, and L is already occupied by c,
+            - if a and b want to go to L, and L is already occupied by c,
             c gets out, but a and b hit each other
-
+            - if a wants to move into a space enemy b happens to as well, it does this continuously, huurting itslef
+            - 
         todo:
-        dodge enemy suicides
+        * dodge enemy suicides
         dodge preemtive attacks against me
         # ###############
         '''
@@ -251,7 +258,7 @@ class Robot:
                 mbot = Robot.new(bot)
                 maction = mbot.act(game, meta-1)
                 if maction == action:
-                    # print("resolving priority, "+str(self.robot_id)+" at "+str(self.location)+"vs"+str(bot.robot_id)+" at "+str(bot.location))
+                    print("resolving priority, "+str(maction)+" "+str(self.robot_id)+" at "+str(self.location)+" vs "+str(bot.robot_id)+" at "+str(bot.location))
                     winrar = self.robot_id < bot.robot_id
                     if winrar == False:
                         return False
@@ -312,19 +319,22 @@ class Robot:
 
             return True
 
+        def try_move_to(t):
+            if is_move_possible(self, t):
+                return ['move', t]
+            else:
+                # print('considering alternatives')
+                alternatives = {}
+                for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
+                    if loc != t and is_move_possible(self, loc):
+                        alternatives[loc] = rg.dist(self.location, loc)
+                if len(alternatives) > 0:
+                    best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
+                    return ['move', best_alt]
 
-        if is_move_possible(self, next_step):
-            return ['move', next_step]
-        else:
-            # print('considering alternatives')
-            alternatives = {}
-            for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
-                if loc != next_step and is_move_possible(self, loc):
-                    alternatives[loc] = rg.dist(self.location, loc)
-            if len(alternatives) > 0:
-                best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
-                return ['move', best_alt]
-        
+        m = try_move_to(next_step)
+        if m:
+            return m
         #if we couldn't decide to do anything else, just guard
         return self.guard()
 

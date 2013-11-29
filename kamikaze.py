@@ -88,7 +88,7 @@ class Robot:
             timings[turn] = ms
         return action
 
-    def act(self, game, meta=2): 
+    def act(self, game, meta=2):
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
@@ -98,12 +98,27 @@ class Robot:
 
         # "The value of the key parameter should be a function that takes 
         # a single argument and returns a key to use for sorting purposes."
+        # dict -> list
         def query(bot_dict, sorting_function, offset=0):
             organized = sorted(bot_dict.items(), key=sorting_function)
             # returns a list of tuples, [(key, value),... ]
             if len(organized) == 0:
                 print('found nothing')
+            # print(str(organized))
             return organized
+
+        # list -> list # redundant, just use python's sorted
+        # def lquery(bot_list, sorting_function, offset=0):
+        #     organized = sorted(bot_list, key=sorting_function)
+        #     return organized
+        # dict -> dict
+        def dquery(bot_dict, sorting_function, offset=0):
+            q = query(bot_dict, sorting_function, offset)
+            ts = map(lambda b: (b.location, b), q)
+            # returns a list of tuples, [(key, value),... ]
+            return ts
+
+
         def get_weakest_enemy(offset=0):
             return query(all_enemies, lambda t: t[1].hp)[offset][1]
 
@@ -127,13 +142,30 @@ class Robot:
 
         if len(all_enemies) == 0:
             print('---$$$$$      There are no enemies remaining!      $$$$$---')
+            return self.guard() # should probably use this opportunity to move into a more favorable position
 
         # For now we're a hunter
         # we're going to target the weakest enemy first,
         # unless there's somebody else closer, in which case we'll go for them
 
         # first_enemy_location = get_first_enemy_location()
-        weakest_enemy = get_weakest_enemy()
+
+        def get_weakest_closest_enemy(loc, weakest_to_consider=3):
+            # print('            STARTIN THIS THING')
+            enemies_by_hp = query(all_enemies, lambda t: t[1].hp)
+            # print('            done query')
+            topX = enemies_by_hp[:weakest_to_consider]
+            # print(str(topX))
+            def distfun(tple):
+                l, b = tple
+                return rg.dist(loc, l)
+
+            the_bot = sorted(topX, key=distfun)[0][1]
+            # print("returning")
+            # print(the_bot)
+            return the_bot
+
+        weakest_enemy = get_weakest_closest_enemy(self.location, 2)
         target_enemy = weakest_enemy
         
         if len(adjacent_enemies) > 0:
@@ -258,7 +290,7 @@ class Robot:
                 mbot = Robot.new(bot)
                 maction = mbot.act(game, meta-1)
                 if maction == action:
-                    print("resolving priority, "+str(maction)+" "+str(self.robot_id)+" at "+str(self.location)+" vs "+str(bot.robot_id)+" at "+str(bot.location))
+                    # print("resolving priority, "+str(maction)+" "+str(self.robot_id)+" at "+str(self.location)+" vs "+str(bot.robot_id)+" at "+str(bot.location))
                     winrar = self.robot_id < bot.robot_id
                     if winrar == False:
                         return False

@@ -732,11 +732,12 @@ class World2d(World):
 
     def h(self, s1, s2):
         # if self.diags:
-        dy = abs(s2.y - s1.y)
-        dx = abs(s2.x - s1.x)
-        return math.sqrt(dx**2 + dy**2)
+        # dy = abs(s2.y - s1.y)
+        # dx = abs(s2.x - s1.x)
+        # return math.sqrt(dx**2 + dy**2)
         # else:
-        #     return abs(s2.y-s1.y) + abs(s2.x-s1.x)
+        # preforms slightly better in split tests
+        return abs(s2.y-s1.y) + abs(s2.x-s1.x)
 
     def change_c(self, s1, s2, c):
         if not self.in_bounds(s2.x, s2.y):
@@ -883,36 +884,6 @@ class Dijkstra(AStar):
     """
     def h(self, s1, s2, h_func=None):
         return 0
-
-def rand_cost_map(x_size=1, y_size=1,  min_val=1, max_val=inf,
-        flip=False, flip_chance=.1):
-    """
-    Returns a 2d cost matrix with random values.
-
-    Args:
-        y_size - width
-        x_size - height
-        min_val - minimum random value
-        max_val - maximum random value
-        flip - if True, then the value in each cell is either min_val
-               or max_val;
-               if False, then min_val <= value of cell <= max_val
-        flip_chance - chance of getting a max_val (only if flip=True)
-    """
-    grid = []
-    for i in range(x_size):
-        row = []
-        for j in range(y_size):
-            if flip:
-                if random.random() < flip_chance:
-                    row.append(max_val) 
-                else:
-                    row.append(min_val)
-            else:
-                row.append(random.randint(min_val, max_val))
-        grid.append(row)
-    return grid
-
 
 def check_walkable(loc, game=None):
     if not set(rg.loc_types(loc)).isdisjoint(set(['invalid', 'obstacle'])):

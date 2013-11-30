@@ -34,6 +34,16 @@ loc_type_priority = [
     "spawn",
     "normal"
 ]
+directions = {
+    "left":(-1, 0),
+    "right":(1, 0),
+    "down":(0, -1),
+    "up":(0, 1),
+    "a":(-1, 0),
+    "d":(1, 0),
+    "s":(0, -1),
+    "w":(0, 1)
+}
 class Robot:
     def act(self, game):
         self.print_board(game)
@@ -52,7 +62,10 @@ class Robot:
             while(self.validate_action([action, location], game) == False):
                 print("Where should this Robot "+action+"?")
                 rloc = raw_input()
-                location = ast.literal_eval(rloc)
+                if rloc in directions:
+                    location = (directions[rloc][0] + self.position[0], directions[rloc][1]+self.position[1])
+                else:
+                    location = ast.literal_eval(rloc)
 
             return [action, location]
         else:

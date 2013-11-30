@@ -99,21 +99,23 @@ class Robot:
                     draw(loc_types[0])
 
         def nice_number(n):
-            return str(n) if n >=  10 else " "+str(n)
+            return " "+(str(n) if n >=  10 else " "+str(n))
 
         dbl_rows = []
         for r in rows:
             nr = []
             ci = nice_number(len(dbl_rows)/2)
-            nr.append(ci)
+            nr.append(ci+" ")
             for c in r:
                 nr.append(c)
                 nr.append(c)
+                nr.append(c)
+
             dbl_rows.append(nr)
             dbl_rows.append(nr)
 
 
-        strlist = [" ", " "]+map(nice_number, range(board_size))
+        strlist = [" ", " ", " "]+map(nice_number, range(board_size))
         dbl_rows.insert(0, strlist)
 
         for r in range(len(dbl_rows)):

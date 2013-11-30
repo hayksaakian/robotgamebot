@@ -63,7 +63,7 @@ class Robot:
                 print("Where should this Robot "+action+"?")
                 rloc = raw_input()
                 if rloc in directions:
-                    location = (directions[rloc][0] + self.position[0], directions[rloc][1]+self.position[1])
+                    location = (directions[rloc][0] + self.location[0], directions[rloc][1]+self.location[1])
                 else:
                     location = ast.literal_eval(rloc)
 

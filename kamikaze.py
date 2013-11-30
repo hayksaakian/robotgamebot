@@ -165,7 +165,7 @@ class Robot:
             # print(the_bot)
             return the_bot
 
-        weakest_enemy = get_weakest_closest_enemy(self.location, 2)
+        weakest_enemy = get_weakest_closest_enemy(self.location, 3)
         target_enemy = weakest_enemy
         
         if len(adjacent_enemies) > 0:
@@ -193,6 +193,15 @@ class Robot:
         # Offensive Code
         todo:
         fix: sometimes it just suicides even though no one is around to hit
+        - some strategy for sitting in the corner of a target:
+            swap spots maybe to trade attacks in case the enemy is retalliating
+            example:
+            XE
+            XX
+             X
+
+        maybe focus on hunting down the ultimate target rather than
+        just attacking something if it's adjacent
         # ###############
         '''
 
@@ -207,6 +216,8 @@ class Robot:
             return self.location == weakest_allies_next_to_adjacent_target_enemy[0][0]
 
         if len(adjacent_enemies) > 0 and len(adjacent_enemies) < suicide_threshold:
+        # if rg.wdist(self.location, ultimate_target) <= 1 and len(adjacent_enemies) < suicide_threshold:
+
             # following line is better by 102-20-17 over just self.hp < 10
             # inspired by peterm's stupid 2.6 bot
             # assuming all adjacent enemies attacked me, if I would die
@@ -277,8 +288,11 @@ class Robot:
             - if a wants to move into a space enemy b happens to as well, it does this continuously, huurting itslef
             - 
         todo:
+        - run away from unwinnable fights (2 enemies vs 1 bot)
+            - pre-empt enemies running away
         * dodge enemy suicides
         dodge preemtive attacks against me
+
         # ###############
         '''
 

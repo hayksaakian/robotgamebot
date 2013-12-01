@@ -54,7 +54,7 @@ turn = None
 class Robot:
 
     def act(self, game):
-        if turn != game['turn'];
+        if turn != game['turn']:
             print("     ~~~~~     NEW TURN     ~~~~~     ")
             turn = game['turn']
         print("     ~~~~~     TURN "+str(turn)+"/100     ~~~~~     ")

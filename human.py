@@ -11,6 +11,12 @@ actions_requiring_location = [
     "attack",
     "move"
 ]
+action_synonyms = {
+    "attack" : ["a", "atk", "attack"],
+    "guard" : ["g", "grd", "guard", "defend"],
+    "move" : ["m", "go", "goto", "mv", "move"],
+    "suicide" : ["s", "die", "suicide"]
+}
 back_indicators = [
     "back",
     "cancel",
@@ -37,12 +43,12 @@ loc_type_priority = [
 directions = {
     "left":(-1, 0),
     "right":(1, 0),
-    "down":(0, -1),
-    "up":(0, 1),
+    "up":(0, -1),
+    "down":(0, 1),
     "a":(-1, 0),
     "d":(1, 0),
-    "s":(0, -1),
-    "w":(0, 1)
+    "w":(0, -1),
+    "s":(0, 1)
 }
 class Robot:
     def act(self, game):

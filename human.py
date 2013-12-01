@@ -50,10 +50,12 @@ directions = {
     "w":(0, -1),
     "s":(0, 1)
 }
+global turn
 turn = None
 class Robot:
 
     def act(self, game):
+        global turn
         if turn != game['turn']:
             print("     ~~~~~     NEW TURN     ~~~~~     ")
             turn = game['turn']
@@ -82,6 +84,8 @@ class Robot:
                 rloc = raw_input()
                 if rloc in back_indicators:
                     # need some way to "go back"
+                    pass
+
                 if rloc in directions:
                     location = (directions[rloc][0] + self.location[0], directions[rloc][1]+self.location[1])
                 else:

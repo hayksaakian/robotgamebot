@@ -50,8 +50,16 @@ directions = {
     "w":(0, -1),
     "s":(0, 1)
 }
+turn = None
 class Robot:
+
     def act(self, game):
+        if turn != game['turn'];
+            print("     ~~~~~     NEW TURN     ~~~~~     ")
+            turn = game['turn']
+        print("     ~~~~~     TURN "+str(turn)+"/100     ~~~~~     ")
+
+
         self.print_board(game)
         action = self.prompt_human(game)
         print(str(self.location)+" will try to "+str(action))
@@ -62,12 +70,18 @@ class Robot:
         while(action not in possible_actions):
             print(str(self.location)+" ("+str(self.hp)+"/50hp) What will this Robot do?")
             action = raw_input()
+            for a in action_synonyms:
+                if action in action_synonyms[a]:
+                    action = a
+                    break
 
         if action in actions_requiring_location:
             location = None
             while(self.validate_action([action, location], game) == False):
                 print("Where should this Robot "+action+"?")
                 rloc = raw_input()
+                if rloc in back_indicators:
+                    # need some way to "go back"
                 if rloc in directions:
                     location = (directions[rloc][0] + self.location[0], directions[rloc][1]+self.location[1])
                 else:

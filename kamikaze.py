@@ -202,6 +202,10 @@ class Robot:
 
         maybe focus on hunting down the ultimate target rather than
         just attacking something if it's adjacent
+
+        strategy:
+            pin people in spawns and let the counter kill them
+            do more predictive attacking
         # ###############
         '''
 

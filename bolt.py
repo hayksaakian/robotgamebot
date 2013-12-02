@@ -1,3 +1,4 @@
+from profilehooks import profile
 import rg
 import operator
 from time import time
@@ -18,47 +19,18 @@ class Node(object):
 
 timings = {}
 
+# NOTE: Death turn is 10
+
+
+walk_score_cache = {}
+# walk_score_cache[(turn, location, meta)] = score
+
 class Robot:
     """
     # NOTE: This is a god damned LIE
     # robots are not actually instantiated, it only ever creates one robot, 
     # and then changes it's attributes and calls .act
     """
-    # def __init__(self):
-    #     self.nodemap = []
-
-    def testact(self, game, meta=2):
-        # self.__init__() #Calling __init__ because of LIES
-        target = rg.CENTER_POINT
-
-        if self.location == target:
-            return self.guard()
-
-        for loc, bot in game.get('robots').items():
-            if bot.player_id != self.player_id:
-                if rg.dist(loc, self.location) <= 1:
-                    return self.attack(loc)
-
-        t0 = time()
-        path = astar_find_path(self.location, target)
-        t = time()
-        print("A Star Pathfinding took "+str((t-t0)*1000)+" milliseconds. "+str(len(path))+" steps.")
-
-        next_step = path[1]
-        
-        # t0 = time()
-        # path = self.nice_find_path(self.location, target, game)
-        # t = time()
-        # print("Best-First Pathfinding took "+str((t-t0)*1000)+" milliseconds. "+str(len(path))+" steps.")
-
-        if len(path) > 1:
-
-            print(next_step)
-            print("#############      awesome, we got a path      ###########")
-            return self.move(next_step)
-
-        print("CRAP: No path found from "+str(self.location))
-        return self.guard()
 
     @staticmethod
     def new(robot_dict={}):
@@ -88,13 +60,16 @@ class Robot:
             timings[turn] = ms
         return action
 
+    @profile
     def act(self, game, meta=2):
+        death_turn = game['turn'] % 10 == 0
         adjacent_robots = self.get_adjacent_robots(game)
         adjacent_friendlies = self.get_adjacent_robots(game, operator.__eq__)
         adjacent_enemies = self.get_adjacent_robots(game, operator.__ne__)
 
         all_enemies = self.get_all_robots(game, operator.__ne__)
         all_friendlies = self.get_all_robots(game, operator.__eq__)
+        robots = game['robots']
 
         # "The value of the key parameter should be a function that takes 
         # a single argument and returns a key to use for sorting purposes."
@@ -126,27 +101,26 @@ class Robot:
             return query(adjacent_enemies, lambda t: t[1].hp)[offset][1]
 
         # 1) get out of a spawn if it's going to kill you
-        first_turn = 0 # not sure if turn 1 or turn 0 is the first turn
-        if game['turn'] % 10 == first_turn:
-            if 'spawn' in rg.loc_types(self.location):
-                for loc in rg.locs_around(self.location, ['invalid', 'spawn', 'obstacle']):
-                    # the first good place!
-                    if loc not in game['robots'].keys():
-                        return ['move', loc]
-                    a_robot = game['robots'][loc]
-                    if meta > 0 and a_robot.player_id == self.player_id:
-                        rbot = Robot.new(a_robot)
-                        raction = rbot.act(game, meta-1)
-                        if raction in ['move']:
+        def bail_spawn():
+            first_turn = 0 # not sure if turn 1 or turn 0 is the first turn
+            if game['turn'] % 10 == first_turn:
+                if 'spawn' in rg.loc_types(self.location):
+                    for loc in rg.locs_around(self.location, ['invalid', 'spawn', 'obstacle']):
+                        # the first good place!
+                        if loc not in game['robots'].keys():
                             return ['move', loc]
+                        a_robot = game['robots'][loc]
+                        if meta > 0 and a_robot.player_id == self.player_id:
+                            rbot = Robot.new(a_robot)
+                            raction = rbot.act(game, meta-1)
+                            if raction in ['move']:
+                                return ['move', loc]
 
         if len(all_enemies) == 0:
             print('---$$$$$      There are no enemies remaining!      $$$$$---')
             return self.guard() # should probably use this opportunity to move into a more favorable position
 
-        # For now we're a hunter
-        # we're going to target the weakest enemy first,
-        # unless there's somebody else closer, in which case we'll go for them
+        # This is a runner, it avoids conflict
 
         # first_enemy_location = get_first_enemy_location()
 
@@ -177,7 +151,45 @@ class Robot:
 
         # STRATEGY HERE:
         # move towards the weakest enemy
-        ultimate_target = target_enemy.location
+        # ultimate_target = target_enemy.location
+        
+        # A good place to flee to is one far away from enemy robots, lets judge each spot based on how many adjacent enemies there are
+
+        def walk_score(loc, meta=2):
+            if (game['turn'], loc, meta) in walk_score_cache:
+                return walk_score_cache[(game['turn'], loc, meta)]
+            if death_turn and 'spawn' in rg.loc_types(loc):
+                return -1000000
+            arnd = rg.locs_around(loc, filter_out=('invalid', 'obstacle'))
+            score = len(arnd)
+            adje = self.get_adjacent_robots_to(loc, game, operator.__ne__)
+            adja = self.get_adjacent_robots_to(loc, game, operator.__eq__)
+            score -= (1.5*len(adje))
+            score -= (0.5*len(adje))
+            if meta > 0:
+                for lo in arnd:
+                    score += (walk_score(lo, meta-1)*(1/4))
+            walk_score_cache[(game['turn'], loc, meta)] = score
+            return score
+
+        board_size = (rg.CENTER_POINT[0] * 2) + 1
+        board = robots.copy()
+
+        def find_safest_spot():
+            best_walk_score = 0
+            best_spot = rg.CENTER_POINT
+            for x in range(board_size):
+                for y in range(board_size):
+                    l = (x, y)
+                    if check_walkable(l, game):
+                        score = walk_score(l)
+                        board[l] = {}
+                        board[l]['walk_score'] = score
+                        if score > best_walk_score:
+                            best_spot = l
+            return best_spot
+
+        ultimate_target = find_safest_spot()
 
         path = astar_find_path(self.location, ultimate_target)
 
@@ -219,14 +231,14 @@ class Robot:
             weakest_allies_next_to_adjacent_target_enemy = query(adjacent_allies_to_target_enemy, lambda t: t[1].hp)
             return self.location == weakest_allies_next_to_adjacent_target_enemy[0][0]
 
-        if len(adjacent_enemies) > 0 and len(adjacent_enemies) < suicide_threshold:
+        if len(adjacent_enemies) > 1 and len(adjacent_enemies) < suicide_threshold:
         # if rg.wdist(self.location, ultimate_target) <= 1 and len(adjacent_enemies) < suicide_threshold:
 
             # following line is better by 102-20-17 over just self.hp < 10
             # inspired by peterm's stupid 2.6 bot
             # assuming all adjacent enemies attacked me, if I would die
             # i should instead suicide
-            if self.hp < (rg.settings.attack_range[1]*len(adjacent_enemies)):
+            if self.hp < (rg.settings.attack_range[0]*len(adjacent_enemies)):
                 return ['suicide']
             # IDEA: if i could kill the enemy with 1 suicide instead of two attacks
             # NOTE: if multiple allies are going for this target, i'll actually lose too many bots
@@ -271,9 +283,6 @@ class Robot:
 
                 if target_enemy.hp <= (rg.settings.attack_range[0]*simul_attackers):
                     potential_kills -= 1
-
-
-
 
             if potential_kills >= 1.5:
                 return ['suicide']
@@ -326,7 +335,7 @@ class Robot:
 
         def is_move_possible(robot, t_pos):
             # determine if the tile is even walkable
-            if not self.check_walkable(t_pos, game):
+            if not check_walkable(t_pos, game):
                 return False
             # determine if the IS OCCUPIED and/or WILL STAY occupied
 
@@ -372,15 +381,14 @@ class Robot:
         def try_move_to(t):
             if is_move_possible(self, t):
                 return ['move', t]
-            else:
-                # print('considering alternatives')
-                alternatives = {}
-                for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
-                    if loc != t and is_move_possible(self, loc):
-                        alternatives[loc] = rg.dist(self.location, loc)
-                if len(alternatives) > 0:
-                    best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
-                    return ['move', best_alt]
+            # print('considering alternatives')
+            alternatives = {}
+            for loc in rg.locs_around(self.location, ['invalid', 'obstacle']):
+                if loc != t and is_move_possible(self, loc):
+                    alternatives[loc] = rg.dist(self.location, loc)
+            if len(alternatives) > 0:
+                best_alt = sorted(alternatives.iteritems(), key=operator.itemgetter(1))[0][0]
+                return ['move', best_alt]
 
         m = try_move_to(next_step)
         if m:
@@ -414,166 +422,22 @@ class Robot:
     # NOTE: Excludes the location in question!
     def get_adjacent_robots_to(self, some_location, game, player_comparator=None, exclusive=True):
         def generate():
-            for loc,bot in game.get('robots').items():
-                if loc != some_location or exclusive == False:
-                    if rg.wdist(loc, some_location) <= 1:
-                        if player_comparator == None or player_comparator(self.player_id, bot.player_id):
-                            yield (loc, bot)
+            # manhatten dist. use adjacent_deltas for real adjacency
+            places_to_check = rg.locs_around(some_location)
+            if exclusive == False:
+                places_to_check.append(some_location) 
+            for l in places_to_check:
+                if l in game['robots']:
+                    bot = game['robots'][l]
+                    if player_comparator == None or player_comparator(self.player_id, bot.player_id):
+                        yield (l, bot)
      
         return dict(generate())
             
     def get_adjacent_robots(self, game, player_comparator=None):
         return self.get_adjacent_robots_to(self.location, game, player_comparator)
 
-
-    def check_walkable(self, loc, game):
-        # if True in [(loc in game['robots']), ('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
-        if True in [('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
-            return False
-        # if it's a spawning turn
-        # if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 1:
-        #     return False
-        return True
-
-    # def check_walkable(self, loc, game):
-    #     if True in [('obstacle' in rg.loc_types(loc)), ('invalid' in rg.loc_types(loc))]:
-    #         return False
-    #     # if it's a spawning turn
-    #     if 'spawn' in rg.loc_types(loc) and game['turn'] % 10 == 0:
-    #         return False
-
-
     # same idea as rg.toward but, this will consider other robots as path blockers
-
-    '''
-    ##########################################################################################
-    # PATHFINDING STARTS HERE
-    inspired by:
-    bi-directional best first search pathfinder:
-
-    https://github.com/qiao/PathFinding.js/blob/master/src/finders/BiBreadthFirstFinder.js
-    ##########################################################################################
-    '''
-
-    def generate_nodemap(self, game, board_size):
-        self.nodemap = []
-        # print("generated a "+str(board_size)+" square grid")
-        for x in range(board_size):
-            self.nodemap.append([])
-            for y in range(board_size):
-                self.nodemap[x].append(Node(x, y, self.check_walkable((x, y), game)))
-        # return nodemap
-
-
-    def get_neighbors(self, node, allow_diagonal=False, dont_cross_corners=True):
-        # print('- Getting Neighbors:')
-        x0 = node.x
-        y0 = node.y
-        neighbors = []
-        for loc in rg.locs_around((x0, y0)):
-            if loc != (x0, y0):
-                x = loc[0]
-                y = loc[1]
-                # print("checking "+str(x)+", "+str(y))
-                yes = self.nodemap[x][y].walkable
-                # print("-- "+str(yes))
-                if yes:
-                    neighbors.append(self.nodemap[x][y])
-        # currently the code for diagonals is unnecessary and thus missing
-        # print("= got "+str(len(neighbors))+" neighbors")
-        if allow_diagonal == False:
-            return neighbors
-
-    def backtrace(self, node):
-        path = [(node.x, node.y)]
-        while node.parent:
-            node = node.parent
-            path.append((node.x, node.y))
-
-        path.reverse()
-        return path
-
-    def bi_backtrace(self, node_a, node_b):
-        path_a = self.backtrace(node_a)
-        path_b = self.backtrace(node_b)
-        path_b.reverse()
-        return operator.add(path_a, path_b)
-
-    def nice_find_path(self, start, end, game):
-        board_size = (rg.CENTER_POINT[0] * 2) + 1
-        self.generate_nodemap(game, board_size)
-        path = self.find_path(start[0], start[1], end[0], end[1], game)
-        return path
-
-    def find_path(self, startX, startY, endX, endY, game):
-        BY_START = 0
-        BY_END = 1
-
-        start_node = self.nodemap[startX][startY]
-        end_node = self.nodemap[endX][endY]
-
-        start_open_list = [start_node]
-        end_open_list = [end_node]
-
-        start_node.opened = True
-        start_node.by = BY_START
-
-        start_node.opened = True
-        start_node.by = BY_START
-
-        # print("----- doing pathfinding -----")
-        while (len(start_open_list) > 0) and (len(end_open_list) > 0):
-            # print("searching "+str(len(start_open_list)) + " plus " + str(len(end_open_list))+" nodes")
-
-            node = start_open_list.pop(0)
-            # print("    now  looking at "+str(node.x)+", "+str(node.y))
-            node.closed = True
-            neighbors = self.get_neighbors(node, allow_diagonal=False, dont_cross_corners=True)
-            for neighbor in neighbors:
-                if neighbor.closed:
-                    # print("closed!!")
-                    continue
-                if neighbor.opened:
-                    # if this node has been inspected by the,
-                    # reversed search, then a path has been found
-                    if neighbor.by == BY_END:
-                        path = self.bi_backtrace(node, neighbor)
-                        return path
-                    continue
-                neighbor.parent = node
-                neighbor.opened = True
-                neighbor.by = BY_START
-                start_open_list.append(neighbor)
-                # print("queued neighbor start")
-
-            # expand end open list
-            node = end_open_list.pop(0)
-            # print("   also looking at "+str(node.x)+", "+str(node.y))
-            node.closed = True
-            neighbors = self.get_neighbors(node, allow_diagonal=False, dont_cross_corners=True)
-            for neighbor in neighbors:
-
-                if neighbor.closed:
-                    # print("closed!!")
-                    continue
-                if neighbor.opened:
-                    if neighbor.by == BY_START:
-                        path = self.bi_backtrace(neighbor, node)
-                        return path
-                    continue
-                neighbor.parent = node
-                neighbor.opened = True
-                neighbor.by = BY_END
-                end_open_list.append(neighbor)
-                # print("queued neighbor end")
-
-            # print("left to search "+str(len(start_open_list)) + " plus " + str(len(end_open_list))+" nodes")
-
-        return []
-
-# kill switch
-# import sys
-# sys.exit(1)
 
 '''
 ##########################################################################################
@@ -893,6 +757,8 @@ def check_walkable(loc, game=None):
     if not set(rg.loc_types(loc)).isdisjoint(set(['invalid', 'obstacle'])):
         return False
     if game and loc in game['robots']:
+        return False
+    if game and game['turn'] % 10 == 0 and 'spawn' in rg.loc_types(loc):
         return False
     return True
 

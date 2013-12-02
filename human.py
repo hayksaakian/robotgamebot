@@ -32,7 +32,7 @@ char_map = {
     "obstacle":"-",
     "enemy":"E",
     "ally":"A",
-    "self":"@"
+    "self":"S"
 }
 loc_type_priority = [
     "invalid",
@@ -104,6 +104,8 @@ class Robot:
         return True #placeholder
 
     def print_board(self, game):
+        space_w = 3
+        space_h = 2
         board_size = (rg.CENTER_POINT[0] * 2) + 1
         rows = map(lambda i: [], range(board_size))
         for y in range(len(rows)):
@@ -131,15 +133,14 @@ class Robot:
             ci = nice_number(len(dbl_rows)/2)
             nr.append(ci+" ")
             for c in r:
-                nr.append(c)
-                nr.append(c)
-                nr.append(c)
+                for tj in range(space_w):
+                    nr.append(c)
 
-            dbl_rows.append(nr)
-            dbl_rows.append(nr)
+            for tk in range(space_h):
+                dbl_rows.append(nr)
 
 
-        strlist = [" ", " ", " "]+map(nice_number, range(board_size))
+        strlist = map(lambda z: " ", range(space_w))+map(nice_number, range(board_size))
         dbl_rows.insert(0, strlist)
 
         for r in range(len(dbl_rows)):

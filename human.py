@@ -1,30 +1,6 @@
 import ast
 import rg
 
-possible_actions = [
-    "guard",
-    "suicide",
-    "attack",
-    "move"
-]
-actions_requiring_location = [
-    "attack",
-    "move"
-]
-action_synonyms = {
-    "attack" : ["a", "atk", "attack"],
-    "guard" : ["g", "grd", "guard", "defend"],
-    "move" : ["m", "go", "goto", "mv", "move"],
-    "suicide" : ["s", "die", "suicide"]
-}
-back_indicators = [
-    "back",
-    "cancel",
-    "no",
-    "action",
-    "exit",
-    "undo"
-]
 char_map = {
     "invalid":None,
     "normal":" ",
@@ -40,6 +16,31 @@ loc_type_priority = [
     "spawn",
     "normal"
 ]
+
+possible_actions = [
+    "guard",
+    "suicide",
+    "attack",
+    "move"
+]
+actions_requiring_location = [
+    "attack",
+    "move"
+]
+action_synonyms = {
+    "attack" : ["a", "atk", "attack", "q"],
+    "guard" : ["g", "grd", "guard", "defend"],
+    "move" : ["m", "go", "goto", "mv", "move", "e"],
+    "suicide" : ["s", "die", "suicide"]
+}
+back_indicators = [
+    "back",
+    "cancel",
+    "no",
+    "action",
+    "exit",
+    "undo"
+]
 directions = {
     "left":(-1, 0),
     "right":(1, 0),
@@ -50,6 +51,9 @@ directions = {
     "w":(0, -1),
     "s":(0, 1)
 }
+
+quick_actions = ["qa", "qs", "qd", "qw", "ea", "es", "ed", "ew"]
+
 global turn
 turn = None
 class Robot:
@@ -69,31 +73,38 @@ class Robot:
 
     def prompt_human(self, game):
         action = None
+        location = None
         while(action not in possible_actions):
             print(str(self.location)+" ("+str(self.hp)+"/50hp) What will this Robot do?")
             action = raw_input()
-            for a in action_synonyms:
-                if action in action_synonyms[a]:
-                    action = a
-                    break
+            if action in quick_actions:
+                qa = self.quick_action(action)
+                action = qa[0]
+                location = qa[1]
+                # print(qa)
+            else:
+                action = self.parse_action(action)
 
         if action in actions_requiring_location:
-            location = None
             while(self.validate_action([action, location], game) == False):
                 print("Where should this Robot "+action+"?")
                 rloc = raw_input()
                 if rloc in back_indicators:
-                    # need some way to "go back"
-                    pass
+                    break
 
                 if rloc in directions:
-                    location = (directions[rloc][0] + self.location[0], directions[rloc][1]+self.location[1])
+                    location = add_tuples(directions[rloc], self.location)
                 else:
                     location = ast.literal_eval(rloc)
-
-            return [action, location]
+            if location == None:
+                return self.prompt_human(game)
+            else:
+                return [action, location]
         else:
             return [action]
+
+    def add_tuples(self, a, b):
+        return (a[0]+b[0], a[1]+b[1])
         
     def validate_action(self, formatted_action, game):
         if len(formatted_action) > 1:
@@ -102,6 +113,20 @@ class Robot:
             if formatted_action[0] == "move":
                 return formatted_action[1] in rg.locs_around(self.location)
         return True #placeholder
+
+    def parse_action(self, action):
+        for a in action_synonyms:
+            if action in action_synonyms[a]:
+                action = a
+                break
+        return action
+
+    def quick_action(self, action):
+        parts = list(action) #str.split by characters
+        result_action = [self.parse_action(parts.pop(0))]
+        if len(parts) > 0:
+            result_action.append(self.add_tuples(directions[parts.pop(0)], self.location))
+        return result_action
 
     def print_board(self, game):
         space_w = 3
@@ -146,5 +171,6 @@ class Robot:
         for r in range(len(dbl_rows)):
             sr = nice_number(r)
             print "".join(dbl_rows[r])
+
 
 

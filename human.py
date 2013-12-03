@@ -8,7 +8,23 @@ char_map = {
     "obstacle":"-",
     "enemy":"E",
     "ally":"A",
-    "self":"S"
+    "self":"S",
+    "directions":{
+        "up":"^",
+        "down":"v",
+        "left":"<",
+        "right":">",
+        "w":"^",
+        "s":"v",
+        "a":"<",
+        "d":">"
+    },
+    "actions":{
+        "attack":"Q",
+        "move":"M",
+        "suicide":"X",
+        "guard":"#"
+    }
 }
 loc_type_priority = [
     "invalid",
@@ -51,8 +67,14 @@ directions = {
     "w":(0, -1),
     "s":(0, 1)
 }
+def first_direction_by_value(v):
+    for k, val in directions.items():
+        if val == v:
+            return k
 
 quick_actions = ["qa", "qs", "qd", "qw", "ea", "es", "ed", "ew"]
+action_cache = {}
+# action_cache[(turn, robot_location)] = action
 
 global turn
 turn = None
@@ -69,6 +91,7 @@ class Robot:
         self.print_board(game)
         action = self.prompt_human(game)
         print(str(self.location)+" will try to "+str(action))
+        action_cache[(game['turn'], self.location)] = action
         return action
 
     def prompt_human(self, game):
@@ -93,7 +116,7 @@ class Robot:
                     break
 
                 if rloc in directions:
-                    location = add_tuples(directions[rloc], self.location)
+                    location = self.add_tuples(directions[rloc], self.location)
                 else:
                     location = ast.literal_eval(rloc)
             if location == None:
@@ -102,6 +125,9 @@ class Robot:
                 return [action, location]
         else:
             return [action]
+
+    def subtract_tuples(self, a, b):
+        return (a[0]-b[0], a[1]-b[1])
 
     def add_tuples(self, a, b):
         return (a[0]+b[0], a[1]+b[1])
@@ -129,41 +155,90 @@ class Robot:
         return result_action
 
     def print_board(self, game):
-        space_w = 3
-        space_h = 2
         board_size = (rg.CENTER_POINT[0] * 2) + 1
+        space_w = 4
+        space_h = 2
         rows = map(lambda i: [], range(board_size))
-        for y in range(len(rows)):
-
-            def draw(k):
-                if k in char_map:
-                    k = char_map[k]
-                rows[y].append(k)
-            for x in range(board_size):
-                l = (x, y)
-                if l == self.location:
-                    draw("self")
-                elif l in game['robots']:
-                    draw("ally") if game['robots'][l].player_id == self.player_id else draw("enemy")
-                else:
-                    loc_types = sorted(rg.loc_types(l), key=lambda t:loc_type_priority.index(t))
-                    draw(loc_types[0])
 
         def nice_number(n):
             return " "+(str(n) if n >=  10 else " "+str(n))
+        def draw(l):
+            if l == self.location:
+                k = "self"
+            elif l in game['robots']:
+                k = "ally" if game['robots'][l].player_id == self.player_id else "enemy"
+            else:
+                loc_types = sorted(rg.loc_types(l), key=lambda t:loc_type_priority.index(t))
+                k = loc_types[0]
+
+            if k in char_map:
+                k = char_map[k]
+            return k    
+
+        for y in range(board_size):
+            for x in range(board_size):
+                l = (x, y)
+                cell = []
+                # example:
+                # SSSS # currently selected robot
+                # 39hp
+                # AAQ> # ally attacking right
+                # 20hp
+                for h in range(space_h):
+                    r = []
+                    for w in range(space_w):
+                        if l in game['robots']:
+                            if (w >= 2 and w <= 3) and h == 0:
+                                if w == 2 and (game['turn'], l) in action_cache:
+                                    act = action_cache[(game['turn'], l)]
+                                    a = char_map['actions'][act[0]]
+                                    d = a
+                                    if len(act)>1:
+                                        delta = self.subtract_tuples(act[1], l)
+                                        d_name = first_direction_by_value(delta)
+                                        d = char_map['directions'][d_name]
+                                    r.append(a)
+                                    r.append(d)
+                                else:
+                                    r.append(draw(l))
+                            elif (w >= 0 and w <= 3) and h == 1:
+                                if w == 0:
+                                    r = list(nice_number(game['robots'][l]['hp']).strip()+"hp")
+                            else:# w == 0 and h == 0:
+                                r.append(draw(l))
+                        else:# we don't have stats to show if there's no robot
+                            r.append(draw(l))
+
+                    cell.append(r)
+                rows[y].append(cell)
+
+
+        space_w = 4
+        space_h = 2
+        # SSSS
+        # 39hp
 
         dbl_rows = []
-        for r in rows:
+        # NOTE this takes advantage of how python divides integers
+        # so don't use algebra to remove any division when refactoring
+        # eg: 2/4 == 0
+        for ri in range(len(rows)*space_h):
+            ysci = ri/space_h
+            r = rows[ysci] # and r is a list of cells
             nr = []
-            ci = nice_number(len(dbl_rows)/2)
-            nr.append(ci+" ")
-            for c in r:
-                for tj in range(space_w):
-                    nr.append(c)
+            num = nice_number(ysci) if ri % space_h == 0 else "   "
+            nr.append(num+" ")
+            for ci in range(len(r)*space_w):
+                xsci = ci/space_w
+                x_in_cell = ci - (xsci * space_w)
+                y_in_cell = ri - (ysci * space_h)
+                cell_c = r[xsci][y_in_cell][x_in_cell]
+                nr.append(cell_c)
 
-            for tk in range(space_h):
-                dbl_rows.append(nr)
+                # for tj in range(space_w):
+                # nr.append(c)
 
+            dbl_rows.append(nr)
 
         strlist = map(lambda z: " ", range(space_w))+map(nice_number, range(board_size))
         dbl_rows.insert(0, strlist)
